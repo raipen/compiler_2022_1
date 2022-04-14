@@ -1,0 +1,150 @@
+   1: /* A program to perform selection sort on a 10
+	   1: ID, val= /*A
+	   1: ID, val= program
+	   1: ID, val= to
+	   1: ID, val= perform
+	   1: ID, val= selection
+	   1: ID, val= sort
+	   1: ID, val= on
+	   1: ID, val= a
+	   1: NUM, val= 10
+   2:    element array. */
+	   2: ID, val= element
+	   2: ID, val= array.
+   3: 
+   4: int x[10];
+	   4: ID, val= */int
+	   4: ID, val= x[10];
+   5: 
+   6: int minloc ( int a[], int low, int high )
+	   6: ID, val= int
+	   6: ID, val= minloc
+	   6: ID, val= (int
+	   6: ID, val= a[],
+	   6: ID, val= int
+	   6: ID, val= low,
+	   6: ID, val= int
+	   6: ID, val= high
+   7: {	int i; int x; int k;
+	   7: ID, val= ){int
+	   7: ID, val= i;
+	   7: ID, val= int
+	   7: ID, val= x;
+	   7: ID, val= int
+	   7: ID, val= k;
+   8: 	k = low;
+	   8: ID, val= k
+	   8: ID, val= =low;
+   9: 	x = a[low];
+	   9: ID, val= x
+	   9: ID, val= =a[low];
+  10: 	i = low + 1;
+	  10: ID, val= i
+	  10: ID, val= =low
+	  10: NUM, val= +1;
+  11: 	while (i < high)
+	  11: ID, val= while
+	  11: ID, val= (i
+	  11: ID, val= <high)
+  12: 	{	if (a[i] < x)
+	  12: ID, val= {if
+	  12: ID, val= (a[i]
+	  12: ID, val= <x)
+  13: 			{ x = a[i];
+	  13: ID, val= {x
+	  13: ID, val= =a[i];
+  14: 			  k = i;  }
+	  14: ID, val= k
+	  14: ID, val= =i;
+  15: 		i = i + 1;
+	  15: ID, val= }i
+	  15: ID, val= =i
+	  15: NUM, val= +1;
+  16: 	}
+  17: 	return k;
+	  17: ID, val= }return
+	  17: ID, val= k;
+  18: }
+  19: 
+  20: void sort( int a[], int low, int high)
+	  20: ID, val= }void
+	  20: ID, val= sort(
+	  20: ID, val= int
+	  20: ID, val= a[],
+	  20: ID, val= int
+	  20: ID, val= low,
+	  20: ID, val= int
+	  20: ID, val= high)
+  21: {	int i; int k;
+	  21: ID, val= {int
+	  21: ID, val= i;
+	  21: ID, val= int
+	  21: ID, val= k;
+  22: 	i = low;	
+	  22: ID, val= i
+	  22: ID, val= =low;
+  23: 
+  24: 	while (i < high-1)
+	  24: ID, val= while
+	  24: ID, val= (i
+	  24: ID, val= <high-1)
+  25: 	{	int t;
+	  25: ID, val= {int
+	  25: ID, val= t;
+  26: 		k = minloc(a,i,high,i);
+	  26: ID, val= k
+	  26: ID, val= =minloc(a,i,high,i);
+  27: 		t = a[k];
+	  27: ID, val= t
+	  27: ID, val= =a[k];
+  28: 		a[k] = a[i];
+	  28: ID, val= a[k]
+	  28: ID, val= =a[i];
+  29: 		a[i] = t;
+	  29: ID, val= a[i]
+	  29: ID, val= =t;
+  30: 		i = i + 1;
+	  30: ID, val= i
+	  30: ID, val= =i
+	  30: NUM, val= +1;
+  31: 	}
+  32: }
+  33: 
+  34: void main(void)
+	  34: ID, val= }}void
+	  34: ID, val= main(void)
+  35: {	int i;
+	  35: ID, val= {int
+	  35: ID, val= i;
+  36: 	i = 0;
+	  36: ID, val= i
+	  36: NUM, val= =0;
+  37: 	while (i < 10)
+	  37: ID, val= while
+	  37: ID, val= (i
+	  37: NUM, val= <10)
+  38: 	{	x[i] = input();
+	  38: ID, val= {x[i]
+	  38: ID, val= =input();
+  39: 		i = i + 1; }
+	  39: ID, val= i
+	  39: ID, val= =i
+	  39: NUM, val= +1;
+  40: 	sort(x,0,10);
+	  40: ID, val= }sort(x,0,10);
+  41: 	i = 0;
+	  41: ID, val= i
+	  41: NUM, val= =0;
+  42: 	while (i < 10)
+	  42: ID, val= while
+	  42: ID, val= (i
+	  42: NUM, val= <10)
+  43: 	{	output(x[i]);
+	  43: ID, val= {output(x[i]);
+  44: 		i = i + 1; }
+	  44: ID, val= i
+	  44: ID, val= =i
+	  44: NUM, val= +1;
+  45: }
+  46: }
+	  47: EOF
