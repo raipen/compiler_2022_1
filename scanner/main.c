@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <ctype.h>
 #define MAX_BUFF_SIZE 1000
-#define DEBUG
 #ifdef DEBUG
 #define debug(a) a
 #define OUTPUT stdout
@@ -12,7 +11,7 @@
 #endif
 typedef enum{
     START,
-    /*숫자나 문자가 들어오는 경우에만 lookAhead를 curToken.string에 SAVE 한다.
+    /*숫자나 문자가 들어오는 경우에만 lookAhead를 curToken->string에 SAVE 한다.
     단일 문자 토큰이 들어온 경우 lookAhead를 STAY하고 다시 START로 넘어간다.
     공백 문자를 포함한 그 외의 경우는 모두 IGNORE한다. */
     INNUM, //숫자가 들어오면 시작, 숫자가 들어오면 SAVE, 숫자가 아니면 BACK하고 START로 돌아감
@@ -33,11 +32,10 @@ typedef enum {
     //STAY는 현재 문자까지를 하나의 토큰으로 판단한다.
 }LookAhead;
 typedef enum {
-    /*0~2*/
-    ERROR, ID, NUM,
-    /* 예약어(3~8) */
+    ENDFILE,ERROR, ID, NUM,
+    /* 예약어 */
    ELSE, IF, INT, RETURN, VOID, WHILE,
-    /* special symbols(9~27)*/
+    /* special symbols*/
     PLUS, MINUS, TIMES,DIVIDE,LESS,LESS_EQUAL,GREATER,GREATER_EQUAL, EQUAL, NOT_EQUAL,ASSIGN,SEMICOLON,COMMA, LPAREN, RPAREN, LBRACE, RBRACE, LSQUARE, RSQUARE
 }TokenType;
 #define RESERVED_TOKEN_COUNT 6
@@ -56,32 +54,35 @@ TokenType findKeywords(char* tokenString) {
 FILE* input,* output;//입력 파일과 출력 파일
 StateType state = START; //현재 상태
 int curLine = 0; //검사중인 라인
-struct {
+typedef struct {
     TokenType type; //현재 토큰 종류
     char string[MAX_BUFF_SIZE]; //현재 토큰의 내용
     int index; //현재 토큰 내용의 인덱스
-} curToken = { ERROR,"",0 };
+}token;
 
 #define FIRST_SPECIAL_SYMBOL PLUS
 char specialSymbols[][3] = { "+","-","*","/","<","<=",">",">=","==","!=","=",";",",","(",")","{","}","[","]" };
-void printToken() {
+void printToken(token* curToken) {
 
     fprintf(OUTPUT, "\t%d: ",curLine);
-    switch (curToken.type) {
+    switch (curToken->type) {
+    case ENDFILE:
+        fprintf(OUTPUT, "EOF\n");
+        break;
     case ERROR:
-        fprintf(OUTPUT, "ERROR: %s\n", curToken.string);
+        fprintf(OUTPUT, "ERROR: %s\n", curToken->string);
         break;
     case ID:
-        fprintf(OUTPUT, "ID, name= %s\n", curToken.string);
+        fprintf(OUTPUT, "ID, name= %s\n", curToken->string);
         break;
     case NUM:
-        fprintf(OUTPUT, "NUM, val= %s\n", curToken.string);
+        fprintf(OUTPUT, "NUM, val= %s\n", curToken->string);
         break;
     default:
-        if (curToken.type < 9)
-            fprintf(OUTPUT, "reserved word: % s\n", curToken.string);
+        if (curToken->type < FIRST_SPECIAL_SYMBOL)
+            fprintf(OUTPUT, "reserved word: % s\n", curToken->string);
         else
-            fprintf(OUTPUT, "%s\n", specialSymbols[curToken.type- FIRST_SPECIAL_SYMBOL]);
+            fprintf(OUTPUT, "%s\n", specialSymbols[curToken->type- FIRST_SPECIAL_SYMBOL]);
     }
 }
 
@@ -101,10 +102,9 @@ void initInput(int argc, char* argv[]) {
 
 void initState() {
     state = START;
-    curToken.index = 0;
 }
 
-LookAhead checkAhead(char c) {
+LookAhead checkAhead(char c,token* curToken) {
     switch (state) {
     case START:
         if (isdigit(c))
@@ -133,41 +133,41 @@ LookAhead checkAhead(char c) {
             default: //모두 STAY
                 switch (c) {
                 case '+':
-                    curToken.type = PLUS;
+                    curToken->type = PLUS;
                     break;
                 case '-':
-                    curToken.type = MINUS;
+                    curToken->type = MINUS;
                     break;
                 case '*':
-                    curToken.type = TIMES;
+                    curToken->type = TIMES;
                     break;
                 case ';':
-                    curToken.type = SEMICOLON;
+                    curToken->type = SEMICOLON;
                     break;
                 case ',':
-                    curToken.type = COMMA;
+                    curToken->type = COMMA;
                     break;
                 case '(':
-                    curToken.type = LPAREN;
+                    curToken->type = LPAREN;
                     break;
                 case ')':
-                    curToken.type = RPAREN;
+                    curToken->type = RPAREN;
                     break;
                 case '{':
-                    curToken.type = LBRACE;
+                    curToken->type = LBRACE;
                     break;
                 case '}':
-                    curToken.type = RBRACE;
+                    curToken->type = RBRACE;
                     break;
                 case '[':
-                    curToken.type = LSQUARE;
+                    curToken->type = LSQUARE;
                     break;
                 case ']':
-                    curToken.type = RSQUARE;
+                    curToken->type = RSQUARE;
                     break;
                 default:
-                    curToken.type = ERROR;
-                    curToken.string[curToken.index++] = c;
+                    curToken->type = ERROR;
+                    curToken->string[curToken->index++] = c;
                     break;
                 }
                 return STAY;
@@ -180,13 +180,13 @@ LookAhead checkAhead(char c) {
 
     case INNUM: //숫자가 들어오면 시작, 숫자가 들어오면 SAVE, 숫자가 아니면 BACK하고 START로 돌아감
         if (!isdigit(c)) {
-            curToken.type = NUM;
+            curToken->type = NUM;
             return BACK;
         }
         return SAVE;
     case INID: //문자가 들어오면 시작, 문자가 들어오면 SAVE, 문자가 아니면 BACK하고 START로 돌아감
         if (!isalpha(c)) {
-            curToken.type = ID;
+            curToken->type = ID;
             return BACK;
         }
         return SAVE;
@@ -197,7 +197,7 @@ LookAhead checkAhead(char c) {
             state = INCOMMENT;
             return IGNORE;
         default:
-            curToken.type = DIVIDE;
+            curToken->type = DIVIDE;
             return BACK;
         }
     case INCOMMENT: // "/*"가 들어오면 시작, '*'이 들어오면 OUTCOMMENT로 넘어감,항상 모두 IGNORE
@@ -219,73 +219,97 @@ LookAhead checkAhead(char c) {
     case INLESS: //'<'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
         switch (c) {
         case '=':
-            curToken.type = LESS_EQUAL;
+            curToken->type = LESS_EQUAL;
             return STAY;
         default:
-            curToken.type = LESS;
+            curToken->type = LESS;
             return BACK;
         }
         break;
     case INGREATER: //'>'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
         switch (c) {
         case '=':
-            curToken.type = GREATER_EQUAL;
+            curToken->type = GREATER_EQUAL;
             return STAY;
         default:
-            curToken.type = GREATER;
+            curToken->type = GREATER;
             return BACK;
         }
         break;
     case INEQ: //'='가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
         switch (c) {
         case '=':
-            curToken.type = EQUAL;
+            curToken->type = EQUAL;
             return STAY;
         default:
-            curToken.type = ASSIGN;
+            curToken->type = ASSIGN;
             return BACK;
         }
         break;
     case INNE: //'!'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
         switch (c) {
         case '=':
-            curToken.type = NOT_EQUAL;
+            curToken->type = NOT_EQUAL;
             return STAY;
         default:
-            curToken.type = ERROR;
-            curToken.string[curToken.index++] = '!';
+            curToken->type = ERROR;
+            curToken->string[curToken->index++] = '!';
             return BACK;
         }
         break;
     }
 }
 
-int main(int argc, char* argv[]) {
-    initInput(argc,argv);
-    char lineHold[MAX_BUFF_SIZE];
-    while (!feof(input)) {
-        if(fgets(lineHold, MAX_BUFF_SIZE, input)==NULL) break;
-        fprintf(OUTPUT, "%2d: %s", ++curLine,lineHold);
+char lineHold[MAX_BUFF_SIZE] = { 0 }; //입력파일로 부터 받아온 문자열 저장
+int buff_index = 0;
+
+char getAhead() {
+    if (!lineHold[buff_index]) {
+        if (fgets(lineHold, MAX_BUFF_SIZE, input) == NULL) return EOF;
+        fprintf(OUTPUT, "%2d: %s", ++curLine, lineHold);
         if (feof(input)) fprintf(OUTPUT, "\n");
-        for (int i = 0; lineHold[i]; i++) {
-            switch (checkAhead(lineHold[i])) {
-            case SAVE: //현재 문자를 토큰에 추가
-                curToken.string[curToken.index++] = lineHold[i];
-                break;
-            case IGNORE:
-                // do nothing
-                break;
-            case BACK:  //현재 문자 이전에서 상태 완료.
-                i--;
-            case STAY: //현재 문자까지 포함하여 상태 완료.
-                curToken.string[curToken.index] = '\0';
-                curToken.type = curToken.type == ID ? findKeywords(curToken.string): curToken.type;
-                printToken();
-                initState(); //처음 상태로 초기화
-                break;
-            }
+        buff_index = 0;
+    }
+    return lineHold[buff_index++];
+}
+
+void backAhead() {
+    buff_index--;
+}
+
+token getToken() {
+    token curToken = { ENDFILE,"",0 };
+    while (1) {
+        char c = getAhead();
+        if (c == EOF) {
+            curLine++;
+            return curToken;
+        }
+        switch (checkAhead(c, &curToken)) {
+        case SAVE: //현재 문자를 토큰에 추가
+            curToken.string[curToken.index++] = c;
+            break;
+        case IGNORE:
+            // do nothing
+            break;
+        case BACK:  //현재 문자 이전에서 상태 완료.
+            backAhead();
+        case STAY: //현재 문자까지 포함하여 상태 완료.
+            curToken.string[curToken.index] = '\0';
+            curToken.type = curToken.type == ID ? findKeywords(curToken.string) : curToken.type;
+            initState(); //처음 상태로 초기화
+            return curToken;
         }
     }
-    fprintf(OUTPUT,"\t%d: EOF\n",++curLine);
+}
+
+
+int main(int argc, char* argv[]) {
+    initInput(argc,argv);
+    token curToken;
+    do {
+        curToken = getToken();
+        printToken(&curToken);
+    } while (curToken.type != ENDFILE);
     return 0;
 }
