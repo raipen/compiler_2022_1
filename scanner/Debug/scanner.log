@@ -1,3 +1,5 @@
 ﻿  main.c
-I:\학교\2022\컴파일러\scanner\2022scanner\scanner\main.c(44,13): warning C4013: 'exit'이(가) 정의되지 않았습니다. extern은 int형을 반환하는 것으로 간주합니다.
-  scanner.vcxproj -> I:\학교\2022\컴파일러\scanner\2022scanner\Debug\scanner.exe
+C:\Users\PC\Desktop\학교\2022\컴파일러\scanner\compiler_2022_1\scanner\main.c(51,20): warning C4013: 'strcmp'이(가) 정의되지 않았습니다. extern은 int형을 반환하는 것으로 간주합니다.
+C:\Users\PC\Desktop\학교\2022\컴파일러\scanner\compiler_2022_1\scanner\main.c(92,13): warning C4013: 'exit'이(가) 정의되지 않았습니다. extern은 int형을 반환하는 것으로 간주합니다.
+C:\Users\PC\Desktop\학교\2022\컴파일러\scanner\compiler_2022_1\scanner\main.c(261): warning C4715: 'checkAhead': 모든 제어 경로에서 값을 반환하지는 않습니다.
+  scanner.vcxproj -> C:\Users\PC\Desktop\학교\2022\컴파일러\scanner\compiler_2022_1\Debug\scanner.exe

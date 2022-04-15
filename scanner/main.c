@@ -11,10 +11,26 @@
 #define OUTPUT output
 #endif
 typedef enum{
-    START, INEQ, INCOMMENT, INNUM, INID, DONE, INLT, INGT, INNE, INOVER, INCOMMENT_
+    START,
+    /*숫자나 문자가 들어오는 경우에만 lookAhead를 curToken.string에 SAVE 한다.
+    단일 문자 토큰이 들어온 경우 lookAhead를 STAY하고 다시 START로 넘어간다.
+    공백 문자를 포함한 그 외의 경우는 모두 IGNORE한다. */
+    INNUM, //숫자가 들어오면 시작, 숫자가 들어오면 SAVE, 숫자가 아니면 BACK하고 START로 돌아감
+    INID, //문자가 들어오면 시작, 문자가 들어오면 SAVE, 문자가 아니면 BACK하고 START로 돌아감
+    INDIVIDE, // '/'가 들어오면 시작, '*'이 오면 IGNORE하고 INCOMMENT로 넘어감, 아니면 그냥 BACK으로 DIVIDE 토큰을 넘기고 START로 돌아간다.
+    INCOMMENT, // "/*"가 들어오면 시작, '*'이 들어오면 OUTCOMMENT로 넘어감,항상 모두 IGNORE
+    OUTCOMMENT, //INCOMMNET 중 '*'이 들어오면 시작, 바로 이어서 '/'가 들어오면 START, 다른 게 들어오면 INCOMMENT로 돌아감. 항상  IGNORE.
+    INLESS, //'<'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+    INGREATER, //'>'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+    INEQ, //'='가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+    INNE, //'!'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
 }StateType;
 typedef enum {
     SAVE, IGNORE, BACK, STAY
+    //SAVE는 해당 문자를 토큰문자열에 추가한다.
+    //IGNORE은 해당 문자를 무시한다.
+    //BACK은 이전 문자까지를 하나의 토큰으로 판단한다.
+    //STAY는 현재 문자까지를 하나의 토큰으로 판단한다.
 }LookAhead;
 typedef enum {
     /*0~2*/
@@ -37,33 +53,37 @@ TokenType findKeywords(char* tokenString) {
     return ID;
 }
 
-#define FIRST_SPECIAL_SYMBOL PLUS
-char specialSymbols[][3] = { "+","-","*","/","<","<=",">",">=","==","!=","=",";",",","(",")","{","}","[","]" };
-void printToken() {
-    switch (curToken) {
-    case ERROR:
-        fprintf(OUTPUT, "\t%4d: ERROR: %s\n", curLine, curTokString);
-        break;
-    case ID:
-        fprintf(OUTPUT, "\t%4d: ID, val= %s\n", curLine, curTokString);
-        break;
-    case NUM:
-        fprintf(OUTPUT, "\t%4d: NUM, val= %s\n", curLine, curTokString);
-        break;
-    default:
-        if (curToken < 9)
-            fprintf(OUTPUT, "\t%4d: reserved word: % s\n", curLine, curTokString);
-        else
-            fprintf(OUTPUT, "\t%4d: %s\n", curLine, specialSymbols[curToken- FIRST_SPECIAL_SYMBOL]);
-    }
-}
-
 FILE* input,* output;//입력 파일과 출력 파일
 StateType state = START; //현재 상태
 int curLine = 0; //검사중인 라인
-TokenType curToken; //현재 토큰 종류
-char curTokString[MAX_BUFF_SIZE];   //현재 토큰의 내용
-int curTokStringIndex=0;    //현재 토큰 내용의 인덱스
+struct {
+    TokenType type; //현재 토큰 종류
+    char string[MAX_BUFF_SIZE]; //현재 토큰의 내용
+    int index; //현재 토큰 내용의 인덱스
+} curToken = { ERROR,"",0 };
+
+#define FIRST_SPECIAL_SYMBOL PLUS
+char specialSymbols[][3] = { "+","-","*","/","<","<=",">",">=","==","!=","=",";",",","(",")","{","}","[","]" };
+void printToken() {
+
+    fprintf(OUTPUT, "\t%d: ",curLine);
+    switch (curToken.type) {
+    case ERROR:
+        fprintf(OUTPUT, "ERROR: %s\n", curToken.string);
+        break;
+    case ID:
+        fprintf(OUTPUT, "ID, name= %s\n", curToken.string);
+        break;
+    case NUM:
+        fprintf(OUTPUT, "NUM, val= %s\n", curToken.string);
+        break;
+    default:
+        if (curToken.type < 9)
+            fprintf(OUTPUT, "reserved word: % s\n", curToken.string);
+        else
+            fprintf(OUTPUT, "%s\n", specialSymbols[curToken.type- FIRST_SPECIAL_SYMBOL]);
+    }
+}
 
 void initInput(int argc, char* argv[]) {
     if (argc != 3)
@@ -81,7 +101,7 @@ void initInput(int argc, char* argv[]) {
 
 void initState() {
     state = START;
-    curTokStringIndex = 0;
+    curToken.index = 0;
 }
 
 LookAhead checkAhead(char c) {
@@ -92,113 +112,180 @@ LookAhead checkAhead(char c) {
         else if (isalpha(c))
             state = INID;
         else {
-            switch (c) {
+            switch (c) {//여기서 case에 걸러지면 IGNORE
             case ' ': case '\t': case '\n':
-                return IGNORE;
+                break;
             case '/':
-                state = INOVER;
+                state = INDIVIDE;
                 break;
             case '=':
                 state = INEQ;
                 break;
             case '<':
-                state = INLT;
+                state = INLESS;
                 break;
             case '>':
-                state = INGT;
+                state = INGREATER;
                 break;
             case '!':
                 state = INNE;
                 break;
-            default:
+            default: //모두 STAY
                 switch (c) {
                 case '+':
-                    curToken = PLUS;
+                    curToken.type = PLUS;
                     break;
                 case '-':
-                    curToken = MINUS;
+                    curToken.type = MINUS;
                     break;
                 case '*':
-                    curToken = TIMES;
+                    curToken.type = TIMES;
                     break;
                 case ';':
-                    curToken = SEMICOLON;
+                    curToken.type = SEMICOLON;
                     break;
                 case ',':
-                    curToken = COMMA;
+                    curToken.type = COMMA;
                     break;
                 case '(':
-                    curToken = LPAREN;
+                    curToken.type = LPAREN;
                     break;
                 case ')':
-                    curToken = RPAREN;
+                    curToken.type = RPAREN;
                     break;
                 case '{':
-                    curToken = LBRACE;
+                    curToken.type = LBRACE;
                     break;
                 case '}':
-                    curToken = RBRACE;
+                    curToken.type = RBRACE;
                     break;
                 case '[':
-                    curToken = LSQUARE;
+                    curToken.type = LSQUARE;
                     break;
                 case ']':
-                    curToken = RSQUARE;
+                    curToken.type = RSQUARE;
                     break;
                 default:
-                    curToken = ERROR;
+                    curToken.type = ERROR;
+                    curToken.string[curToken.index++] = c;
                     break;
                 }
                 return STAY;
             }
+            return IGNORE;
         }
+        return SAVE;
         break; //end of START case
 
-    case INNUM:
+
+    case INNUM: //숫자가 들어오면 시작, 숫자가 들어오면 SAVE, 숫자가 아니면 BACK하고 START로 돌아감
+        if (!isdigit(c)) {
+            curToken.type = NUM;
+            return BACK;
+        }
+        return SAVE;
+    case INID: //문자가 들어오면 시작, 문자가 들어오면 SAVE, 문자가 아니면 BACK하고 START로 돌아감
+        if (!isalpha(c)) {
+            curToken.type = ID;
+            return BACK;
+        }
+        return SAVE;
+        break;
+    case INDIVIDE: // '/'가 들어오면 시작, '*'이 오면 IGNORE하고 INCOMMENT로 넘어감, 아니면 그냥 BACK으로 DIVIDE 토큰을 넘기고 START로 돌아간다.
         switch (c) {
-        case ' ': case '\t': case '\n':
-            curToken = NUM;
+        case '*':
+            state = INCOMMENT;
+            return IGNORE;
+        default:
+            curToken.type = DIVIDE;
+            return BACK;
+        }
+    case INCOMMENT: // "/*"가 들어오면 시작, '*'이 들어오면 OUTCOMMENT로 넘어감,항상 모두 IGNORE
+        switch (c) {
+        case '*':
+            state = OUTCOMMENT;
+        default:
+            return IGNORE;
+        }
+    case OUTCOMMENT: //INCOMMNET 중 '*'이 들어오면 시작, 바로 이어서 '/'가 들어오면 START, 다른 게 들어오면 INCOMMENT로 돌아감. 항상  IGNORE.
+        switch (c) {
+        case '/':
+            state = START;
+            return IGNORE;
+        default:
+            state = INCOMMENT;
+            return IGNORE;
+        }
+    case INLESS: //'<'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+        switch (c) {
+        case '=':
+            curToken.type = LESS_EQUAL;
+            return STAY;
+        default:
+            curToken.type = LESS;
             return BACK;
         }
         break;
-
-    case INID:
+    case INGREATER: //'>'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
         switch (c) {
-        case ' ': case '\t': case '\n':
-            curToken = ID;
+        case '=':
+            curToken.type = GREATER_EQUAL;
+            return STAY;
+        default:
+            curToken.type = GREATER;
+            return BACK;
+        }
+        break;
+    case INEQ: //'='가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+        switch (c) {
+        case '=':
+            curToken.type = EQUAL;
+            return STAY;
+        default:
+            curToken.type = ASSIGN;
+            return BACK;
+        }
+        break;
+    case INNE: //'!'가 들어오면 시작, '='이 들어오면 STAY하고 아니면 BACK하고 START로 감.
+        switch (c) {
+        case '=':
+            curToken.type = NOT_EQUAL;
+            return STAY;
+        default:
+            curToken.type = ERROR;
+            curToken.string[curToken.index++] = '!';
             return BACK;
         }
         break;
     }
-    return SAVE;
 }
 
 int main(int argc, char* argv[]) {
     initInput(argc,argv);
     char lineHold[MAX_BUFF_SIZE];
     while (!feof(input)) {
-        fgets(lineHold, MAX_BUFF_SIZE, input);
-        fprintf(OUTPUT, "%4d: %s", ++curLine, lineHold);
+        if(fgets(lineHold, MAX_BUFF_SIZE, input)==NULL) break;
+        fprintf(OUTPUT, "%2d: %s", ++curLine,lineHold);
+        if (feof(input)) fprintf(OUTPUT, "\n");
         for (int i = 0; lineHold[i]; i++) {
             switch (checkAhead(lineHold[i])) {
             case SAVE: //현재 문자를 토큰에 추가
-                curTokString[curTokStringIndex++] = lineHold[i];
+                curToken.string[curToken.index++] = lineHold[i];
                 break;
             case IGNORE:
                 // do nothing
                 break;
-            case BACK:  //현재 문자 이전에서 상태 완료. 완성된 토큰에 대한 작업이 들어가면 됨.
+            case BACK:  //현재 문자 이전에서 상태 완료.
                 i--;
-            case STAY: //현재 문자까지 해서 상태 완료.
-                curTokString[curTokStringIndex] = '\0';
-                curToken = curToken == ID ? findKeywords(curTokString): curToken;
+            case STAY: //현재 문자까지 포함하여 상태 완료.
+                curToken.string[curToken.index] = '\0';
+                curToken.type = curToken.type == ID ? findKeywords(curToken.string): curToken.type;
                 printToken();
-
                 initState(); //처음 상태로 초기화
                 break;
             }
         }
     }
-    fprintf(OUTPUT,"\t%4d: EOF\n",++curLine);
+    fprintf(OUTPUT,"\t%d: EOF\n",++curLine);
     return 0;
 }
