@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <ctype.h>
 #define MAX_BUFF_SIZE 1000
-#define DEBUG
-#ifdef DEBUG
+#define SCAN 0
+#define PARSE 1
+#define DEBUG 1
+#if DEBUG
 #define debug(a) a
 #define OUTPUT stdout
 #else
@@ -310,13 +312,60 @@ token getToken() {
     }
 }
 
+////////////////////////////////////
+//파서 구현 시작
+///////////////////////////////////
+typedef enum { StmtK, ExpK } NodeKind;
+typedef enum { IfK, RepeatK, AssignK, ReadK, WriteK } StmtKind;
+typedef enum { OpK, ConstK, IdK } ExpKind;
+
+/* ExpType is used for type checking */
+typedef enum { Void, Integer, Boolean } ExpType;
+
+#define MAXCHILDREN 3
+
+typedef struct treeNode
+{
+    struct treeNode* child[MAXCHILDREN];
+    struct treeNode* sibling;
+    int lineno;
+    NodeKind nodekind;
+    union { StmtKind stmt; ExpKind exp; } kind;
+    union {
+        TokenType op;
+        int val;
+        char* name;
+    } attr;
+    ExpType type; /* for type checking of exps */
+} TreeNode;
+
+token curToken;
+
+
+TreeNode* parse(void)
+{
+    TreeNode* t;
+    curToken = getToken();
+    t = stmt_sequence();
+    if (curToken.type != ENDFILE)
+        syntaxError("Code ends before file\n");
+    return t;
+}
+
+void printTree() {
+
+}
 
 int main(int argc, char* argv[]) {
     initInput(argc,argv);
-    token curToken;
+#if SCAN
     do {
         curToken = getToken();
         printToken(&curToken);
     } while (curToken.type != ENDFILE);
+#endif
+#if PARSE
+    printTree(parse());
+#endif
     return 0;
 }
