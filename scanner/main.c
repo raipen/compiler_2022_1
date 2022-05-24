@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #define MAX_BUFF_SIZE 1000
+#define DEBUG
 #ifdef DEBUG
 #define debug(a) a
 #define OUTPUT stdout
@@ -107,12 +108,12 @@ void initState() {
 LookAhead checkAhead(char c,token* curToken) {
     switch (state) {
     case START:
-        if (isdigit(c))
+        if (isdigit(c)) //숫자가 들어오면 INNUM으로 변경 후 SAVE 리턴
             state = INNUM;
-        else if (isalpha(c))
+        else if (isalpha(c)) //문자가 들어오면 INID로 변경 후 SAVE 리턴
             state = INID;
         else {
-            switch (c) {//여기서 case에 걸러지면 IGNORE
+            switch (c) {//여기서 case에 해당되면 IGNORE
             case ' ': case '\t': case '\n':
                 break;
             case '/':
@@ -130,8 +131,8 @@ LookAhead checkAhead(char c,token* curToken) {
             case '!':
                 state = INNE;
                 break;
-            default: //모두 STAY
-                switch (c) {
+            default:
+                switch (c) { //case에 해당되면 모두 STAY
                 case '+':
                     curToken->type = PLUS;
                     break;
@@ -207,10 +208,12 @@ LookAhead checkAhead(char c,token* curToken) {
         default:
             return IGNORE;
         }
-    case OUTCOMMENT: //INCOMMNET 중 '*'이 들어오면 시작, 바로 이어서 '/'가 들어오면 START, 다른 게 들어오면 INCOMMENT로 돌아감. 항상  IGNORE.
+    case OUTCOMMENT: //INCOMMNET 중 '*'이 들어오면 시작, 바로 이어서 '/'가 들어오면 START, '*'이 들어오면 그대로 OUTCOMMENT, 다른 게 들어오면 INCOMMENT로 돌아감. 항상  IGNORE.
         switch (c) {
         case '/':
             state = START;
+            return IGNORE;
+        case '*':
             return IGNORE;
         default:
             state = INCOMMENT;
@@ -264,37 +267,41 @@ char lineHold[MAX_BUFF_SIZE] = { 0 }; //입력파일로 부터 받아온 문자열 저장
 int buff_index = 0;
 
 char getAhead() {
-    if (!lineHold[buff_index]) {
-        if (fgets(lineHold, MAX_BUFF_SIZE, input) == NULL) return EOF;
-        fprintf(OUTPUT, "%2d: %s", ++curLine, lineHold);
-        if (feof(input)) fprintf(OUTPUT, "\n");
-        buff_index = 0;
+    if (!lineHold[buff_index]) { //버퍼에 있는 문자를 모두 확인 했다면
+        if (fgets(lineHold, MAX_BUFF_SIZE, input) == NULL) return EOF;  //다음줄을 받아옴. 이때 더이상 받아올 줄이 없다면 EOF 반환
+        fprintf(OUTPUT, "%2d: %s", ++curLine, lineHold);    //해당 줄을 화면에 출력
+        if (feof(input)) fprintf(OUTPUT, "\n"); //파일이 엔터 없이 끝난 경우. 엔터를 따로 출력해줌
+        buff_index = 0; //그 라인의 첫번째 값부터 확인하도록 초기화
     }
-    return lineHold[buff_index++];
+    return lineHold[buff_index++]; //버퍼에 있는 다음 문자를 리턴
 }
 
 void backAhead() {
-    buff_index--;
+    buff_index--;   //해당 문자를 읽지 않은 상태로 되돌림
 }
 
 token getToken() {
     token curToken = { ENDFILE,"",0 };
     while (1) {
         char c = getAhead();
-        if (c == EOF) {
-            curLine++;
-            return curToken;
+        if (c == EOF) {         //다음 문자가 파일의 끝이라면
+            curLine++;          //다음줄로 넘어가고
+            return curToken; //ENDFILE 토큰을 리턴
         }
-        switch (checkAhead(c, &curToken)) {
+        switch (checkAhead(c, &curToken)) {     //lookahead를 이용하여 어떻게 처리할 지 체크함.
+            /*SAVE는 해당 문자를 토큰문자열에 추가한다.
+            IGNORE은 해당 문자를 무시한다.
+            BACK은 이전 문자까지를 하나의 토큰으로 판단한다.
+            STAY는 현재 문자까지를 하나의 토큰으로 판단한다.*/
         case SAVE: //현재 문자를 토큰에 추가
             curToken.string[curToken.index++] = c;
             break;
         case IGNORE:
             // do nothing
             break;
-        case BACK:  //현재 문자 이전에서 상태 완료.
+        case BACK:  //현재 문자 이전에서 토큰 리턴.
             backAhead();
-        case STAY: //현재 문자까지 포함하여 상태 완료.
+        case STAY: //현재 문자까지 포함하여 토큰 리턴.
             curToken.string[curToken.index] = '\0';
             curToken.type = curToken.type == ID ? findKeywords(curToken.string) : curToken.type;
             initState(); //처음 상태로 초기화
