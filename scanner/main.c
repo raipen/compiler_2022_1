@@ -316,11 +316,11 @@ token getToken() {
 //파서 구현 시작
 ///////////////////////////////////
 typedef enum { StmtK, ExpK } NodeKind;
-typedef enum { IfK, RepeatK, AssignK, ReadK, WriteK } StmtKind;
+typedef enum { IfK, WhileK, AssignK, ReadK, WriteK } StmtKind;
 typedef enum { OpK, ConstK, IdK } ExpKind;
 
 /* ExpType is used for type checking */
-typedef enum { Void, Integer, Boolean } ExpType;
+typedef enum { Void, Integer } ExpType;
 
 #define MAXCHILDREN 3
 
@@ -339,7 +339,32 @@ typedef struct treeNode
     ExpType type; /* for type checking of exps */
 } TreeNode;
 
+char* copyString(char* s)
+{
+    int n;
+    char* t;
+    if (s == NULL) return NULL;
+    n = strlen(s) + 1;
+    t = malloc(n);
+    if (t == NULL)
+        fprintf(OUTPUT, "Out of memory error\n");
+    else strcpy(t, s);
+    return t;
+}
+
+
+/// <summary>
+/// 파서에 필요한 유틸들 끝
+/// </summary>
+
 token curToken;
+
+
+
+
+
+
+
 
 
 TreeNode* parse(void)
@@ -352,8 +377,72 @@ TreeNode* parse(void)
     return t;
 }
 
-void printTree() {
+///파서 트리 출력하는 내용들
+static indentno = 0;
 
+#define INDENT indentno+=2
+#define UNINDENT indentno-=2
+
+static void printSpaces(void)
+{
+    int i;
+    for (i = 0; i < indentno; i++)
+        fprintf(OUTPUT, " ");
+}
+
+void printTree(TreeNode* tree)
+{
+    int i;
+    INDENT;
+    while (tree != NULL) {
+        printSpaces();
+        if (tree->nodekind == StmtK)
+        {
+            switch (tree->kind.stmt) {
+            case IfK:
+                fprintf(OUTPUT, "If\n");
+                break;
+            case WhileK:
+                fprintf(OUTPUT, "While\n");
+                break;
+            case AssignK:
+                fprintf(OUTPUT, "Assign to: %s\n", tree->attr.name);
+                break;
+            case ReadK:
+                fprintf(OUTPUT, "Read: %s\n", tree->attr.name);
+                break;
+            case WriteK:
+                fprintf(OUTPUT, "Write\n");
+                break;
+            default:
+                fprintf(OUTPUT, "Unknown ExpNode kind\n");
+                break;
+            }
+        }
+        else if (tree->nodekind == ExpK)
+        {
+            switch (tree->kind.exp) {
+            case OpK:
+                fprintf(OUTPUT, "Op: ");
+                printToken(tree->attr.op, "\0");
+                break;
+            case ConstK:
+                fprintf(OUTPUT, "Const: %d\n", tree->attr.val);
+                break;
+            case IdK:
+                fprintf(OUTPUT, "Id: %s\n", tree->attr.name);
+                break;
+            default:
+                fprintf(OUTPUT, "Unknown ExpNode kind\n");
+                break;
+            }
+        }
+        else fprintf(OUTPUT, "Unknown node kind\n");
+        for (i = 0; i < MAXCHILDREN; i++)
+            printTree(tree->child[i]);
+        tree = tree->sibling;
+    }
+    UNINDENT;
 }
 
 int main(int argc, char* argv[]) {
