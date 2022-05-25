@@ -1,0 +1,49 @@
+
+>>> Syntax error at line 4: unexpected token -> 	4: ID, name= x
+      
+>>> Syntax error at line 4: unexpected token(stmt) -> 	4: reserved word: int
+
+>>> Syntax error at line 6: unexpected token -> 	6: ID, name= low
+      
+>>> Syntax error at line 11: unexpected token -> 	11: }
+        Array Var Declaration, name : x, type : int, size : 10
+  Function Declaration, name : minloc, type : int
+    Array Parameter, name : a, type : int
+    Single Parameter, name : low, type : int
+    Single Parameter, name : high, type : int
+    Compound Statement :
+      Var Declaration, name : i, type : int
+      Id : char
+      Id : x
+      Id : k
+      Assign to: k
+        Id : low
+      Assign to: x
+        Id : a
+      Id : low
+      Assign to: i
+        Op : +
+          Id : low
+          Const : 1
+      While
+        Op : <
+          Id : i
+          Id : high
+        Compound Statement :
+          If without else
+            Op : <
+              Id : a
+                Id : i
+              Id : x
+            Compound Statement :
+              Assign to: x
+                Id : a
+                  Id : i
+              Assign to: k
+                Id : i
+          Assign to: i
+            Op : +
+              Id : i
+              Const : 1
+      Return
+        Id : k

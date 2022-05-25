@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <ctype.h>
 #define MAX_BUFF_SIZE 1000
-#define SCAN 0
-#define PARSE 1
-#define DEBUG 1
+#define TRUE 1
+#define FALSE 0
+#define SCAN FALSE
+#define PARSE TRUE
+#define DEBUG FALSE
 #if DEBUG
 #define debug(a) a
 #define OUTPUT stdout
@@ -271,7 +273,12 @@ int buff_index = 0;
 char getAhead() {
     if (!lineHold[buff_index]) { //버퍼에 있는 문자를 모두 확인 했다면
         if (fgets(lineHold, MAX_BUFF_SIZE, input) == NULL) return EOF;  //다음줄을 받아옴. 이때 더이상 받아올 줄이 없다면 EOF 반환
+#if SCAN
         fprintf(OUTPUT, "%2d: %s", ++curLine, lineHold);    //해당 줄을 화면에 출력
+#endif
+#if PARSE
+		curLine++;
+#endif
         if (feof(input)) fprintf(OUTPUT, "\n"); //파일이 엔터 없이 끝난 경우. 엔터를 따로 출력해줌
         buff_index = 0; //그 라인의 첫번째 값부터 확인하도록 초기화
     }
@@ -316,10 +323,8 @@ token getToken() {
 //파서 구현 시작
 ///////////////////////////////////
 typedef enum { StmtK, ExpK } NodeKind;
-typedef enum { IfK, WhileK, AssignK, ReadK, WriteK } StmtKind;
-typedef enum { OpK, ConstK, IdK } ExpKind;
-
-/* ExpType is used for type checking */
+typedef enum { CompStmtK, SelStmtK, IterStmtK, RetStmtK, CallK } StmtKind;
+typedef enum { VarDeclK, VarArrayDeclK, FuncDeclK, AssignK, OpK, IdK, ConstK } ExpKind;
 typedef enum { Void, Integer } ExpType;
 
 #define MAXCHILDREN 3
@@ -337,6 +342,8 @@ typedef struct treeNode
         char* name;
     } attr;
     ExpType type; /* for type checking of exps */
+	int isParam;
+	int arraysize;
 } TreeNode;
 
 char* copyString(char* s)
@@ -352,6 +359,43 @@ char* copyString(char* s)
     return t;
 }
 
+TreeNode* newStmtNode(StmtKind kind)
+{
+	TreeNode* t = (TreeNode*)malloc(sizeof(TreeNode));
+	int i;
+	if (t == NULL)
+		fprintf(OUTPUT, "Out of memory error at line %d\n", curLine);
+	else {
+		for (i = 0; i < MAXCHILDREN; i++) t->child[i] = NULL;
+		t->sibling = NULL;
+		t->nodekind = StmtK;
+		t->kind.stmt = kind;
+		t->lineno = curLine;
+	}
+	return t;
+}
+
+/* Function newExpNode creates a new expression
+* node for syntax tree construction
+*/
+TreeNode* newExpNode(ExpKind kind)
+{
+	TreeNode* t = (TreeNode*)malloc(sizeof(TreeNode));
+	int i;
+	if (t == NULL)
+		fprintf(OUTPUT, "Out of memory error at line %d\n", curLine);
+	else {
+		for (i = 0; i < MAXCHILDREN; i++) t->child[i] = NULL;
+		t->sibling = NULL;
+		t->nodekind = ExpK;
+		t->kind.exp = kind;
+		t->lineno = curLine;
+		t->type = Void;
+		t->isParam = FALSE;
+	}
+	return t;
+}
+
 
 /// <summary>
 /// 파서에 필요한 유틸들 끝
@@ -359,19 +403,586 @@ char* copyString(char* s)
 
 token curToken;
 
+static TreeNode* declaration_list(void);
+static TreeNode* declaration(void);
+static TreeNode* var_declaration(void);
+static ExpType type_spec(void);
+static TreeNode* params(void);
+static TreeNode* param_list(ExpType type);
+static TreeNode* param(ExpType type);
+static TreeNode* compund_stmt(void);
+static TreeNode* local_declarations(void);
+static TreeNode* statement_list(void);
+static TreeNode* statement(void);
+static TreeNode* expression_stmt(void);
+static TreeNode* selection_stmt(void);
+static TreeNode* iteration_stmt(void);
+static TreeNode* return_stmt(void);
+static TreeNode* expression(void);
+static TreeNode* simple_expression(TreeNode* f);
+static TreeNode* add_expr(TreeNode* f);
+static TreeNode* term(TreeNode* f);
+static TreeNode* factor(TreeNode* f);
+static TreeNode* call(void);
+static TreeNode* args(void);
+static TreeNode* args_list(void);
 
+static void syntaxError(char* message){
+	fprintf(OUTPUT, "\n>>> ");
+	fprintf(OUTPUT, "Syntax error at line %d: %s", curLine, message);
+}
 
+static void match(TokenType expected){
+	if (curToken.type == expected) curToken = getToken();
+	else {
+		syntaxError("unexpected token -> ");
+		printToken(&curToken);
+		fprintf(OUTPUT, "      ");
+	}
+}
 
+//declaration-list → declaration { declaration }
+TreeNode* declaration_list(void){
+	TreeNode* t = declaration();
+	TreeNode* p = t;
+	while (curToken.type != ENDFILE){
+		TreeNode* q;
+		q = declaration();
+		if (q != NULL) {
+			if (t == NULL) t = p = q;
+			else{
+				p->sibling = q;
+				p = q;
+			}
+		}
+	}
+	return t;
+}
 
+//declaration → type-specifier ID[("["NUM"]" | "("params")" compund-stmt)];
+TreeNode* declaration(void){
+	TreeNode* t=NULL;
+	ExpType type;
+	char* name;
 
+	type = type_spec();
+	curToken = getToken();
+	name = copyString(curToken.string);
+	match(ID);
 
+	switch (curToken.type)	{
+	case SEMICOLON:  //type-specifier ID;
+		t = newExpNode(VarDeclK);
+		if (t != NULL)
+		{
+			t->attr.name = name;
+			t->type = type;
+		}
+		match(SEMICOLON);
+		break;
+	case LSQUARE: //type-specifier ID[NUM];
+		t = newExpNode(VarArrayDeclK);
+		if (t != NULL)
+		{
+			t->attr.name = name;
+			t->type = type;
+		}
+		match(LSQUARE);
+		if (t != NULL)
+			t->arraysize = atoi(curToken.string);
+		match(NUM);
+		match(RSQUARE);
+		match(SEMICOLON);
+		break;
+	case LPAREN://type-specifier ID(params) compund-stmt;
+		t = newExpNode(FuncDeclK);
+		if (t != NULL)
+		{
+			t->attr.name = name;
+			t->type = type;
+		}
+		match(LPAREN);
+		if (t != NULL)
+			t->child[0] = params();
+		match(RPAREN);
+		if (t != NULL)
+			t->child[1] = compund_stmt();
+		break;
+	default: syntaxError("unexpected token (decl) -> ");
+		printToken(&curToken);
+		curToken = getToken();
+		break;
+	}
+	return t;
+}
 
+//type-specifier → int | void
+ExpType type_spec(void){
+	switch (curToken.type) {
+	case INT:
+		return Integer;
+	case VOID:
+		return Void;
+	default: syntaxError("unexpected token(type_spec) -> ");
+		printToken(&curToken);
+		return Void;
+	}
+}
+//var-declaration → type-specifier ID ["[" NUM "]"] ;
+TreeNode* var_declaration(void){
+	TreeNode* t= NULL;
+	ExpType type;
+	char* name;
 
-TreeNode* parse(void)
-{
+	type = type_spec();
+	curToken = getToken();
+	name = copyString(curToken.string);
+	match(ID);
+	switch (curToken.type)	{
+	case SEMICOLON:
+		t = newExpNode(VarDeclK);
+		if (t != NULL){
+			t->attr.name = name;
+			t->type = type;
+		}
+		match(SEMICOLON);
+		break;
+	case LSQUARE:
+		t = newExpNode(VarArrayDeclK);
+		if (t != NULL){
+			t->attr.name = name;
+			t->type = type;
+		}
+		match(LSQUARE);
+		if (t != NULL)
+			t->arraysize = atoi(curToken.string);
+		match(NUM);
+		match(RSQUARE);
+		match(SEMICOLON);
+		break;
+	default: syntaxError("unexpected token(var_decl) -> ");
+		printToken(&curToken);
+		curToken = getToken();
+		break;
+	}
+	return t;
+}
+
+//params → param-list | void
+TreeNode* params(void){
+	ExpType type;
+	TreeNode* t;
+
+	type = type_spec();
+	curToken = getToken();
+	if (type == Void && curToken.type == RPAREN)	{
+		t = newExpNode(VarDeclK);
+		t->isParam = TRUE;
+		t->type = Void;
+		t->attr.name = "(null)";
+	}
+	else
+		t = param_list(type);
+	return t;
+}
+
+//param-list → param {, param}
+TreeNode* param_list(ExpType type){
+	TreeNode* t = param(type);
+	TreeNode* p = t;
+	TreeNode* q;
+	while (curToken.type == COMMA){
+		match(COMMA);
+		ExpType type = type_spec();
+		curToken = getToken();
+		q = param(type);
+		if (q != NULL) {
+			if (t == NULL) t = p = q;
+			else /* now p cannot be NULL either */
+			{
+				p->sibling = q;
+				p = q;
+			}
+		}
+	}
+	return t;
+}
+
+//param → type-specifier ID["[" "]"]
+TreeNode* param(ExpType type){
+	TreeNode* t;
+	char* name;
+
+	name = copyString(curToken.string);
+	match(ID);
+	if (curToken.type == LSQUARE)	{
+		match(LSQUARE);
+		match(RSQUARE);
+		t = newExpNode(VarArrayDeclK);
+	}
+	else
+		t = newExpNode(VarDeclK);
+	if (t != NULL){
+		t->attr.name = name;
+		t->type = type;
+		t->isParam = TRUE;
+	}
+	return t;
+}
+
+//compound-stmt → "{" local-declarations statement-list "}"
+TreeNode* compund_stmt(void){
+	TreeNode* t = newStmtNode(CompStmtK);
+	match(LBRACE);
+	t->child[0] = local_declarations();
+	t->child[1] = statement_list();
+	match(RBRACE);
+	return t;
+}
+
+//local-declarations → {var-declarations}
+TreeNode* local_declarations(void){
+	TreeNode* t = NULL;
+	TreeNode* p;
+
+	if (curToken.type == INT || curToken.type == VOID)
+		t = var_declaration();
+	p = t;
+	if (t != NULL){
+		while (curToken.type == INT || curToken.type == VOID)	{
+			TreeNode* q;
+			q = var_declaration();
+			if (q != NULL) {
+				if (t == NULL) t = p = q;
+				else {
+					p->sibling = q;
+					p = q;
+				}
+			}
+		}
+	}
+	return t;
+}
+
+//statement-list → {statement}
+TreeNode* statement_list(void){
+	TreeNode* t;
+	TreeNode* p;
+
+	if (curToken.type == RBRACE)
+		return NULL;
+	t = statement();
+	p = t;
+	while (curToken.type != RBRACE){
+		TreeNode* q;
+		q = statement();
+		if (q != NULL) {
+			if (t == NULL) t = p = q;
+			else{
+				p->sibling = q;
+				p = q;
+			}
+		}
+	}
+
+	return t;
+}
+
+//statement → expression-stmt | compound-stmt | selection-stmt | iteration-stmt | return-stmt
+TreeNode* statement(void){
+	TreeNode* t;
+	switch (curToken.type)	{
+	case LBRACE:
+		t = compund_stmt();
+		break;
+	case IF:
+		t = selection_stmt();
+		break;
+	case WHILE:
+		t = iteration_stmt();
+		break;
+	case RETURN:
+		t = return_stmt();
+		break;
+	case ID:
+	case LPAREN:
+	case NUM:
+	case SEMICOLON:
+		t = expression_stmt();
+		break;
+	default: syntaxError("unexpected token(stmt) -> ");
+		printToken(&curToken);
+		curToken = getToken();
+		return Void;
+	}
+	return t;
+}
+
+//expression-stmt → [expression] ;
+TreeNode* expression_stmt(void){
+	TreeNode* t = NULL;
+
+	if (curToken.type == SEMICOLON)
+		match(SEMICOLON);
+	else if (curToken.type != RBRACE)
+	{
+		t = expression();
+		match(SEMICOLON);
+	}
+	return t;
+}
+
+//selection-stmt → if "(" expression ")" statement [else statement]
+TreeNode* selection_stmt(void){
+	TreeNode* t = newStmtNode(SelStmtK);
+
+	match(IF);
+	match(LPAREN);
+	if (t != NULL)
+		t->child[0] = expression();
+	match(RPAREN);
+	if (t != NULL)
+		t->child[1] = statement();
+	if (curToken.type == ELSE)
+	{
+		match(ELSE);
+		if (t != NULL)
+			t->child[2] = statement();
+	}
+
+	return t;
+}
+
+//iteration-stmt → while "(" expression ")" statement
+TreeNode* iteration_stmt(void){
+	TreeNode* t = newStmtNode(IterStmtK);
+
+	match(WHILE);
+	match(LPAREN);
+	if (t != NULL)
+		t->child[0] = expression();
+	match(RPAREN);
+	if (t != NULL)
+		t->child[1] = statement();
+	return t;
+}
+
+//return-stmt → return [expression] ;
+TreeNode* return_stmt(void){
+	TreeNode* t = newStmtNode(RetStmtK);
+
+	match(RETURN);
+	if (curToken.type != SEMICOLON && t != NULL)
+		t->child[0] = expression();
+	match(SEMICOLON);
+	return t;
+}
+
+//expression → {var =} simple-expression
+TreeNode* expression(void){
+	TreeNode* t = NULL;
+	TreeNode* q = NULL;
+	int flag = FALSE;
+
+	if (curToken.type == ID){
+		q = call();
+		flag = TRUE;
+	}
+
+	if (flag == TRUE && curToken.type == ASSIGN)	{
+		if (q != NULL && q->nodekind == ExpK && q->kind.exp == IdK)	{
+			match(ASSIGN);
+			t = newExpNode(AssignK);
+			if (t != NULL){
+				t->child[0] = q;
+				t->child[1] = expression();
+			}
+		}
+		else{
+			syntaxError("wrong lvalue\n");
+			curToken = getToken();
+		}
+	}
+	else
+		t = simple_expression(q);
+	return t;
+}
+
+TreeNode* simple_expression(TreeNode* f){
+	TreeNode* t, * q;
+	TokenType oper;
+	q = add_expr(f);
+	if (curToken.type == LESS || curToken.type == LESS_EQUAL || curToken.type == GREATER_EQUAL || curToken.type == GREATER || curToken.type == EQUAL || curToken.type == NOT_EQUAL)
+	{
+		oper = curToken.type;
+		match(curToken.type);
+		t = newExpNode(OpK);
+		if (t != NULL)
+		{
+			t->child[0] = q;
+			t->child[1] = add_expr(NULL);
+			t->attr.op = oper;
+		}
+	}
+	else
+		t = q;
+	return t;
+}
+
+TreeNode* add_expr(TreeNode* f){
+	TreeNode* t;
+	TreeNode* q;
+
+	t = term(f);
+	if (t != NULL){
+		while (curToken.type == PLUS || curToken.type == MINUS){
+			q = newExpNode(OpK);
+			if (q != NULL) {
+				q->child[0] = t;
+				q->attr.op = curToken.type;
+				t = q;
+				match(curToken.type);
+				t->child[1] = term(NULL);
+
+			}
+		}
+	}
+	return t;
+}
+
+TreeNode* term(TreeNode* f){
+	TreeNode* t;
+	TreeNode* q;
+
+	t = factor(f);
+	if (t != NULL){
+		while (curToken.type == TIMES || curToken.type == DIVIDE)	{
+			q = newExpNode(OpK);
+			if (q != NULL) {
+				q->child[0] = t;
+				q->attr.op = curToken.type;
+				t = q;
+				match(curToken.type);
+				t->child[1] = factor(NULL);
+
+			}
+		}
+	}
+	return t;
+}
+
+TreeNode* factor(TreeNode* f){
+	TreeNode* t;
+
+	if (f != NULL)
+		return f;
+
+	switch (curToken.type)	{
+	case LPAREN:
+		match(LPAREN);
+		t = expression();
+		match(RPAREN);
+		break;
+	case ID:
+		t = call();
+		break;
+	case NUM:
+		t = newExpNode(ConstK);
+		if (t != NULL){
+			t->attr.val = atoi(curToken.string);
+			t->type = Integer;
+		}
+		match(NUM);
+		break;
+	default: syntaxError("unexpected token(factor) -> ");
+		printToken(&curToken);
+		curToken = getToken();
+		return Void;
+	}
+	return t;
+}
+
+TreeNode* call(void){
+	TreeNode* t;
+	char* name=NULL;
+
+	if (curToken.type == ID)
+		name = copyString(curToken.string);
+	match(ID);
+
+	if (curToken.type == LPAREN)
+	{
+		match(LPAREN);
+		t = newStmtNode(CallK);
+		if (t != NULL)
+		{
+			t->attr.name = name;
+			t->child[0] = args();
+		}
+		match(RPAREN);
+	}
+	else if (curToken.type == LSQUARE){
+		t = newExpNode(IdK);
+		if (t != NULL){
+			t->attr.name = name;
+			t->type = Integer;
+			match(LSQUARE);
+			t->child[0] = expression();
+			match(RSQUARE);
+		}
+	}
+	else{
+		t = newExpNode(IdK);
+		if (t != NULL){
+			t->attr.name = name;
+			t->type = Integer;
+		}
+	}
+	return t;
+}
+
+TreeNode* args(void){
+	if (curToken.type == RPAREN)
+		return NULL;
+	else
+		return args_list();
+}
+
+TreeNode* args_list(void){
+	TreeNode* t;
+	TreeNode* p;
+
+	t = expression();
+	p = t;
+	if (t != NULL){
+		while (curToken.type == COMMA){
+			match(COMMA);
+			TreeNode* q = expression();
+			if (q != NULL) {
+				if (t == NULL) t = p = q;
+				else /* now p cannot be NULL either */
+				{
+					p->sibling = q;
+					p = q;
+				}
+			}
+		}
+	}
+	return t;
+}
+
+char* typeName(ExpType type){
+	switch (type){
+	case Integer: return "int"; break;
+	case Void:    return "void"; break;
+	default:      return "wrong type";
+	}
+}
+
+TreeNode* parse(void){
     TreeNode* t;
     curToken = getToken();
-    t = stmt_sequence();
+    t = declaration_list();
     if (curToken.type != ENDFILE)
         syntaxError("Code ends before file\n");
     return t;
@@ -383,66 +994,90 @@ static indentno = 0;
 #define INDENT indentno+=2
 #define UNINDENT indentno-=2
 
-static void printSpaces(void)
-{
+static void printSpaces(void){
     int i;
     for (i = 0; i < indentno; i++)
         fprintf(OUTPUT, " ");
 }
 
-void printTree(TreeNode* tree)
-{
-    int i;
-    INDENT;
-    while (tree != NULL) {
-        printSpaces();
-        if (tree->nodekind == StmtK)
-        {
-            switch (tree->kind.stmt) {
-            case IfK:
-                fprintf(OUTPUT, "If\n");
-                break;
-            case WhileK:
-                fprintf(OUTPUT, "While\n");
-                break;
-            case AssignK:
-                fprintf(OUTPUT, "Assign to: %s\n", tree->attr.name);
-                break;
-            case ReadK:
-                fprintf(OUTPUT, "Read: %s\n", tree->attr.name);
-                break;
-            case WriteK:
-                fprintf(OUTPUT, "Write\n");
-                break;
-            default:
-                fprintf(OUTPUT, "Unknown ExpNode kind\n");
-                break;
-            }
-        }
-        else if (tree->nodekind == ExpK)
-        {
-            switch (tree->kind.exp) {
-            case OpK:
-                fprintf(OUTPUT, "Op: ");
-                printToken(tree->attr.op, "\0");
-                break;
-            case ConstK:
-                fprintf(OUTPUT, "Const: %d\n", tree->attr.val);
-                break;
-            case IdK:
-                fprintf(OUTPUT, "Id: %s\n", tree->attr.name);
-                break;
-            default:
-                fprintf(OUTPUT, "Unknown ExpNode kind\n");
-                break;
-            }
-        }
-        else fprintf(OUTPUT, "Unknown node kind\n");
-        for (i = 0; i < MAXCHILDREN; i++)
-            printTree(tree->child[i]);
-        tree = tree->sibling;
-    }
-    UNINDENT;
+void printTree(TreeNode* tree){
+	int i;
+	INDENT;
+	while (tree != NULL) {
+		i = 0;
+		printSpaces();
+		if (tree->nodekind == StmtK)
+		{
+			switch (tree->kind.stmt) {
+			case CompStmtK:
+				fprintf(OUTPUT, "Compound Statement :\n");
+				break;
+			case SelStmtK:
+				if (tree->child[2] != NULL)
+					fprintf(OUTPUT, "If with else\n");
+				else
+					fprintf(OUTPUT, "If without else\n");
+				break;
+			case IterStmtK:
+				fprintf(OUTPUT, "While\n");
+				break;
+			case RetStmtK:
+					fprintf(OUTPUT, "Return\n");
+				break;
+			case CallK:
+				if (tree->child[0] != NULL)
+					fprintf(OUTPUT, "Call %s, with arguments\n", tree->attr.name);
+				else
+					fprintf(OUTPUT, "Call %s\n", tree->attr.name);
+				break;
+			default:
+				fprintf(OUTPUT, "Unknown ExpNode kind\n");
+				break;
+			}
+		}
+		else if (tree->nodekind == ExpK)
+		{
+			switch (tree->kind.exp) {
+			case VarDeclK:
+				if (tree->isParam == TRUE)
+					fprintf(OUTPUT, "Single Parameter, name : %s, type : %s\n", tree->attr.name, typeName(tree->type));
+				else
+					fprintf(OUTPUT, "Var Declaration, name : %s, type : %s\n", tree->attr.name, typeName(tree->type));
+				break;
+			case VarArrayDeclK:
+				if (tree->isParam == TRUE)
+					fprintf(OUTPUT, "Array Parameter, name : %s, type : %s\n", tree->attr.name, typeName(tree->type));
+				else
+					fprintf(OUTPUT, "Array Var Declaration, name : %s, type : %s, size : %d\n", tree->attr.name, typeName(tree->type), tree->arraysize);
+				break;
+			case FuncDeclK:
+				fprintf(OUTPUT, "Function Declaration, name : %s, type : %s\n", tree->attr.name, typeName(tree->type));
+				break;
+			case AssignK:
+				fprintf(OUTPUT, "Assign to: %s\n",tree->child[0]->attr.name);
+				i++;
+				break;
+			case OpK:
+				fprintf(OUTPUT, "Op : ");
+				fprintf(OUTPUT, "%s\n", specialSymbols[tree->attr.op - FIRST_SPECIAL_SYMBOL]);
+				break;
+			case IdK:
+				fprintf(OUTPUT, "Id : %s\n", tree->attr.name);
+				break;
+			case ConstK:
+				fprintf(OUTPUT, "Const : %d\n", tree->attr.val);
+				break;
+			default:
+				fprintf(OUTPUT, "Unknown ExpNode kind\n");
+				break;
+			}
+		}
+		else fprintf(OUTPUT, "Unknown node kind\n");
+		for (; i < MAXCHILDREN; i++)
+			printTree(tree->child[i]);
+		tree = tree->sibling;
+	}
+	UNINDENT;
 }
 
 int main(int argc, char* argv[]) {
