@@ -1,12 +1,9 @@
-
 >>> Syntax error at line 4: unexpected token -> 	4: ID, name= x
-      
 >>> Syntax error at line 4: unexpected token(stmt) -> 	4: reserved word: int
-
+>>> Syntax error at line 4: unexpected token(stmt) -> 	4: ERROR: !
 >>> Syntax error at line 6: unexpected token -> 	6: ID, name= low
-      
 >>> Syntax error at line 11: unexpected token -> 	11: }
-        Array Var Declaration, name : x, type : int, size : 10
+  Array Var Declaration, name : x, type : int, size : 10
   Function Declaration, name : minloc, type : int
     Array Parameter, name : a, type : int
     Single Parameter, name : low, type : int

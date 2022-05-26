@@ -428,7 +428,7 @@ static TreeNode* args(void);
 static TreeNode* args_list(void);
 
 static void syntaxError(char* message){
-	fprintf(OUTPUT, "\n>>> ");
+	fprintf(OUTPUT, ">>> ");
 	fprintf(OUTPUT, "Syntax error at line %d: %s", curLine, message);
 }
 
@@ -437,7 +437,6 @@ static void match(TokenType expected){
 	else {
 		syntaxError("unexpected token -> ");
 		printToken(&curToken);
-		fprintf(OUTPUT, "      ");
 	}
 }
 
